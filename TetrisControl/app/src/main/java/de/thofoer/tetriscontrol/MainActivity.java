@@ -1,8 +1,5 @@
 package de.thofoer.tetriscontrol;
 
-import androidx.annotation.RequiresApi;
-import androidx.appcompat.app.AppCompatActivity;
-
 import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -20,19 +17,42 @@ import android.widget.ImageButton;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import androidx.annotation.RequiresApi;
+import androidx.appcompat.app.AppCompatActivity;
+
+import java.util.function.Consumer;
+
 public class MainActivity extends AppCompatActivity {
+
+    static final char CMD_RIGHT = 'r';
+    static final char CMD_LEFT = 'l';
+    static final char CMD_TURN = 't';
+    static final char CMD_DOWN = 'd';
+    static final char CMD_START = 's';
+    static final char CMD_RESET = 'x';
+
+    static final char MSG_LEVEL = 'L';
+    static final char MSG_SCORE = 'S';
 
     private ImageButton buttonLeft;
     private ImageButton buttonRight;
     private ImageButton buttonTurn;
     private Button buttonStart;
     private TextView textView;
+    private TextView textViewScoreValue;
+    private TextView textViewLevelValue;
+
     private ScrollView scrollView;
+
+    private int level = 0;
+    private int score = 0;
+
 
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothService bluetoothService;
     private BluetoothDevice device;
-    
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -45,32 +65,34 @@ public class MainActivity extends AppCompatActivity {
         buttonTurn = findViewById(R.id.buttonTurn);
         buttonStart = findViewById(R.id.buttonStart);
         textView = findViewById(R.id.textView);
+        textViewScoreValue = findViewById(R.id.textViewScoreValue);
+        textViewLevelValue = findViewById(R.id.textViewLevelValue);
         scrollView = findViewById(R.id.scrollView);
 
         textView.setMovementMethod(new ScrollingMovementMethod());
 
-        buttonStart.setOnClickListener(event->start());
-        buttonRight.setOnClickListener(event->right());
-        buttonLeft.setOnClickListener(event->left());
-        buttonTurn.setOnClickListener(event->turn());
+        buttonStart.setOnClickListener(event -> start());
+        buttonRight.setOnClickListener(event -> right());
+        buttonLeft.setOnClickListener(event -> left());
+        buttonTurn.setOnClickListener(event -> turn());
 
     }
 
     private void left() {
         textView.append("left\n");
-        bluetoothService.write(new byte[]{97, 98, 99, 13});
+        bluetoothService.write(CMD_LEFT);
         scrollView.fullScroll(View.FOCUS_DOWN);
     }
 
     private void right() {
-        bluetoothService.startConnection(device);
-
         textView.append("right\n");
+        bluetoothService.write(CMD_RIGHT);
         scrollView.fullScroll(View.FOCUS_DOWN);
     }
 
     private void turn() {
         textView.setText("");
+        bluetoothService.write(CMD_TURN);
         scrollView.fullScroll(View.FOCUS_DOWN);
     }
 
@@ -81,58 +103,45 @@ public class MainActivity extends AppCompatActivity {
 
             IntentFilter intentFilter = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
             registerReceiver(turnOnReceiver, intentFilter);
-        }
-        else {
+        } else if (device == null) {
             discover();
         }
     }
 
     private void log(String message) {
         Log.d("Main", message);
-        textView.append(message);
-        textView.append("\n");
-        scrollView.fullScroll(View.FOCUS_DOWN);
-    }
+        runOnUiThread(() -> {
+            textView.append(message);
+            textView.append("\n");
+            scrollView.fullScroll(View.FOCUS_DOWN);
+        });
 
+    }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         unregisterReceiver(discoverReceiver);
+        if (bluetoothService != null) {
+            bluetoothService.destroy();
+        }
     }
 
-
-    private final BroadcastReceiver discoverReceiver = new BroadcastReceiver() {
-        @RequiresApi(api = Build.VERSION_CODES.R)
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (BluetoothDevice.ACTION_FOUND.equals(action)) {
-                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                log("discovered device: "+device.getName()+":"+device.getAlias()+"-"+device.getAddress());
-                if ("Tetris".equals(device.getName())) {
-                    unregisterReceiver(this);
-                    bluetoothAdapter.cancelDiscovery();
-                    foundTetrisDevice(device);
-                }
-            }
-        }
-    };
-
     private void foundTetrisDevice(BluetoothDevice device) {
-        log("found tetris device"+device.getAddress());
+        log("found tetris device" + device.getAddress());
         IntentFilter intentFilter = new IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         registerReceiver(bondingReceiver, intentFilter);
         int state = device.getBondState();
-        switch(state) {
+        switch (state) {
             case BluetoothDevice.BOND_BONDED:
-                log("foundTetrisDevice: BOND_BONDED. "+device);
+                log("foundTetrisDevice: BOND_BONDED. " + device);
                 startBluetoothService(device);
                 break;
             case BluetoothDevice.BOND_BONDING:
-                log("foundTetrisDevice: BOND_BONDING. "+device);
+                log("foundTetrisDevice: BOND_BONDING. " + device);
                 break;
             case BluetoothDevice.BOND_NONE:
-                log("foundTetrisDevice: BOND_NONE. "+device);
+                log("foundTetrisDevice: BOND_NONE. " + device);
                 log("Creating bond ");
                 boolean bondingStarted = device.createBond();
                 if (!bondingStarted) {
@@ -143,61 +152,35 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private final BroadcastReceiver turnOnReceiver = new BroadcastReceiver() {
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
-                int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
-                switch(state) {
-                    case BluetoothAdapter.STATE_OFF:
-                        log("BT is off.");
-                        break;
-                    case BluetoothAdapter.STATE_TURNING_OFF:
-                        log("BT is turning off.");
-                        break;
-                    case BluetoothAdapter.STATE_ON:
-                        log("BT is on.");
-                        discover();
-                        unregisterReceiver(this);
-                        break;
-                    case BluetoothAdapter.STATE_TURNING_ON:
-                        log("BT is turning on.");
-                        break;
-                    default:
-                        log("BT error "+state);
-                }
-            }
-        }
-    };
-
-    private final BroadcastReceiver bondingReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            final String action = intent.getAction();
-
-            if(action.equals(BluetoothDevice.ACTION_BOND_STATE_CHANGED)){
-                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                switch(device.getBondState()) {
-                    case BluetoothDevice.BOND_BONDED:
-                        log("BroadcastReceiver: BOND_BONDED. "+device);
-                        startBluetoothService(device);
-                        break;
-                    case BluetoothDevice.BOND_BONDING:
-                        log("BroadcastReceiver: BOND_BONDING. "+device);
-                        break;
-                    case BluetoothDevice.BOND_NONE:
-                        log("BroadcastReceiver: BOND_NONE. "+device);
-                        break;
-                }
-            }
-        }
-    };
-
     private void startBluetoothService(BluetoothDevice device) {
-        bluetoothService = new BluetoothService(this);
-        bluetoothService.start( );
-
+        bluetoothService = new BluetoothService(this, createReceiver());
         this.device = device;
+        bluetoothService.startConnection(device);
+    }
+
+    private Consumer<byte[]> createReceiver() {
+        return (bytes) -> {
+            switch (bytes[0]) {
+                case MSG_LEVEL:
+                    level(bytes[1]);
+                    break;
+                case MSG_SCORE:
+                    score(bytes[1]);
+                    break;
+            }
+        };
+    }
+
+    private void level(byte level) {
+        log("Level: " + level);
+        runOnUiThread(()->textViewLevelValue.setText(String.valueOf(level)));
+    }
+
+    private void score(byte points) {
+        log("score: " + score);
+        this.score += points;
+        runOnUiThread(()->textViewScoreValue.setText(String.valueOf(this.score)));
+
     }
 
     private void discover() {
@@ -218,9 +201,76 @@ public class MainActivity extends AppCompatActivity {
         permissionCheck += this.checkSelfPermission("Manifest.permission.ACCESS_COARSE_LOCATION");
         if (permissionCheck != 0) {
             requestPermissions(new String[]{
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION},
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION},
                     1001); //Any number
         }
     }
+
+    private final BroadcastReceiver turnOnReceiver = new BroadcastReceiver() {
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(action)) {
+                int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
+                switch (state) {
+                    case BluetoothAdapter.STATE_OFF:
+                        log("BT is off.");
+                        break;
+                    case BluetoothAdapter.STATE_TURNING_OFF:
+                        log("BT is turning off.");
+                        break;
+                    case BluetoothAdapter.STATE_ON:
+                        log("BT is on.");
+                        discover();
+                        unregisterReceiver(this);
+                        break;
+                    case BluetoothAdapter.STATE_TURNING_ON:
+                        log("BT is turning on.");
+                        break;
+                    default:
+                        log("BT error " + state);
+                }
+            }
+        }
+    };
+
+    private final BroadcastReceiver bondingReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final String action = intent.getAction();
+
+            if (action.equals(BluetoothDevice.ACTION_BOND_STATE_CHANGED)) {
+                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                switch (device.getBondState()) {
+                    case BluetoothDevice.BOND_BONDED:
+                        log("BroadcastReceiver: BOND_BONDED. " + device);
+                        startBluetoothService(device);
+                        break;
+                    case BluetoothDevice.BOND_BONDING:
+                        log("BroadcastReceiver: BOND_BONDING. " + device);
+                        break;
+                    case BluetoothDevice.BOND_NONE:
+                        log("BroadcastReceiver: BOND_NONE. " + device);
+                        break;
+                }
+            }
+        }
+    };
+
+    private final BroadcastReceiver discoverReceiver = new BroadcastReceiver() {
+        @RequiresApi(api = Build.VERSION_CODES.R)
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (BluetoothDevice.ACTION_FOUND.equals(action)) {
+                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                log("discovered device: " + device.getName() + ":" + device.getAlias() + "-" + device.getAddress());
+                if ("Tetris".equals(device.getName())) {
+                    unregisterReceiver(this);
+                    bluetoothAdapter.cancelDiscovery();
+                    foundTetrisDevice(device);
+                }
+            }
+        }
+    };
+
 }
