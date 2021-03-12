@@ -12,7 +12,7 @@
 #define LED_TYPE    WS2811
 #define COLOR_ORDER GRB
 #define FRAME_TIME_MS 10
-
+#define FAST_DOWN_SPEED 10
 
 
 CRGB leds[NUM_LEDS];
@@ -20,13 +20,14 @@ CRGB leds[NUM_LEDS];
 BluetoothSerial SerialBT;
 
 int level = 1;
-int tileId = 4;
+int tileId = 1;
 int posX = 2;
 int posY = 0;
 int rot = 0;
 
-int speed = 1;
+int speed = 100;
 int fallCounter = speed;
+boolean fastDown = false;
 
 int matrix[WIDTH][HEIGHT];
 
@@ -60,7 +61,7 @@ void loop() {
   receiveCommand();
   clearLeds();
   drawMatrix();
-  //moveDown();
+  moveDown();
   showTile();
   FastLED.show();  
   delay(FRAME_TIME_MS);
@@ -73,11 +74,16 @@ void moveDown() {
       posY++;
     }
     else {
-      // unten angekommen
-      posY = 0;
+      touchDown();      
     }
-    fallCounter = speed;
+    fallCounter = fastDown ? FAST_DOWN_SPEED : speed;
   }
+}
+
+void touchDown() {
+  fastDown = false;
+  posY = 0;
+  posX = (WIDTH-4)/2;
 }
 
 void dumpTile() {
@@ -106,7 +112,7 @@ boolean isCollision(int dRot, int dX, int dY) {
   boolean collision = false;
   for (int x=0; x<4 && !collision; x++) {
     for (int y=0; y<4 && !collision; y++) {
-       int tilePixel = tiles[(rot+dRot)%4][tileId][y][x];
+       int tilePixel = tiles[(rot+dRot)&0x3][tileId][y][x];
        if (tilePixel) {
          int backgroundPixel = matrix[posX+x+dX][posY+y+dY];
          if (backgroundPixel) {
@@ -138,22 +144,15 @@ void receiveCommand() {
 
 
 void right() {
-   Serial.println("rechts");
-   uint8_t b[2];
-   b[0] = MSG_LEVEL;
-   b[1] = level;
-   SerialBT.write(b, 2);   
-   level++;
-   moveDown();
+   if (!isCollision(0, 1, 0)) {
+     posX+=1;
+   }
 }
 
 void left() {
-   Serial.println("links");
-   uint8_t b[2];
-   b[0] = MSG_SCORE;
-   b[1] = 3;
-   SerialBT.write(b, 2);   
-   tileId = (tileId + 1) % 7;
+   if (!isCollision(0, -1, 0)) {
+     posX-=1;
+   }
 }
 
 void turn() {
@@ -163,13 +162,30 @@ void turn() {
 }
 
 void down() {
-  
+  fastDown = true;
+  fallCounter = FAST_DOWN_SPEED;
 }
+
 void start() {
   
 }
+
 void reset() {
   
+}
+
+void sendScore(int points) {
+   uint8_t b[2];
+   b[0] = MSG_SCORE;
+   b[1] = points;
+   SerialBT.write(b, 2);  
+}
+
+void sendLevel() {
+   uint8_t b[2];
+   b[0] = MSG_LEVEL;
+   b[1] = level;
+   SerialBT.write(b, 2);   
 }
 
 void showTile() {
