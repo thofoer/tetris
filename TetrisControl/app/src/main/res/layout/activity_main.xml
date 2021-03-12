@@ -34,7 +34,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:text="Score"
+                android:text="@string/score"
                 android:textSize="24sp" />
 
             <TextView
@@ -43,7 +43,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="20dp"
                 android:gravity="center"
-                android:text="123"
+                android:text=""
                 android:textSize="36sp" />
 
         </LinearLayout>
@@ -73,7 +73,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:text="Level"
+                android:text="@string/level"
                 android:textSize="24sp" />
 
             <TextView
@@ -82,7 +82,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="20dp"
                 android:gravity="center"
-                android:text="1"
+                android:text=""
                 android:textSize="36sp" />
         </LinearLayout>
 
@@ -99,8 +99,8 @@
             android:layout_height="100dp"
             android:layout_marginStart="5dp"
             android:layout_weight="1"
-            app:srcCompat="@drawable/ic_arrow_back_24px"
-            android:contentDescription="@string/move_left" />
+            android:contentDescription="@string/move_left"
+            app:srcCompat="@drawable/ic_arrow_left" />
 
         <ImageButton
             android:id="@+id/buttonTurn"
@@ -109,7 +109,7 @@
             android:layout_marginLeft="5dp"
             android:layout_marginRight="5dp"
             android:layout_weight="1"
-            app:srcCompat="@drawable/ic_refresh_24px"
+            app:srcCompat="@drawable/ic_arrow_turn"
             android:contentDescription="@string/turn"/>
 
         <ImageButton
@@ -118,10 +118,20 @@
             android:layout_height="100dp"
             android:layout_marginEnd="5dp"
             android:layout_weight="1"
-            app:srcCompat="@drawable/ic_arrow_forward_24px"
-            android:contentDescription="@string/move_right"/>
+            android:contentDescription="@string/move_right"
+            app:srcCompat="@drawable/ic_arrow_right" />
 
     </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/buttonDown"
+        android:layout_width="match_parent"
+        android:layout_height="100dp"
+        android:layout_marginStart="5dp"
+        android:layout_marginEnd="5dp"
+        android:layout_marginBottom="5dp"
+        android:contentDescription="@string/move_down"
+        app:srcCompat="@drawable/ic_arrow_down" />
 
     <ScrollView
         android:id="@+id/scrollView"

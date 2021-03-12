@@ -5,4 +5,7 @@
     <string name="move_left">Move left</string>
     <string name="turn">Turn</string>
     <string name="move_right">Move right</string>
+    <string name="score">Score</string>
+    <string name="level">Level</string>
+    <string name="move_down">Move down</string>
 </resources>

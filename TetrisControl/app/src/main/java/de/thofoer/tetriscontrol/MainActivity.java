@@ -38,6 +38,7 @@ public class MainActivity extends AppCompatActivity {
     private ImageButton buttonLeft;
     private ImageButton buttonRight;
     private ImageButton buttonTurn;
+    private ImageButton buttonDown;
     private Button buttonStart;
     private TextView textView;
     private TextView textViewScoreValue;
@@ -45,7 +46,7 @@ public class MainActivity extends AppCompatActivity {
 
     private ScrollView scrollView;
 
-    private int level = 0;
+    private int level = 1;
     private int score = 0;
 
 
@@ -66,36 +67,40 @@ public class MainActivity extends AppCompatActivity {
         buttonLeft = findViewById(R.id.buttonLeft);
         buttonRight = findViewById(R.id.buttonRight);
         buttonTurn = findViewById(R.id.buttonTurn);
+        buttonDown = findViewById(R.id.buttonDown);
         buttonStart = findViewById(R.id.buttonStart);
         textView = findViewById(R.id.textView);
         textViewScoreValue = findViewById(R.id.textViewScoreValue);
         textViewLevelValue = findViewById(R.id.textViewLevelValue);
         scrollView = findViewById(R.id.scrollView);
-
+        textViewScoreValue.setText(String.valueOf(score));
+        textViewLevelValue.setText(String.valueOf(level));
         textView.setMovementMethod(new ScrollingMovementMethod());
 
-        buttonStart.setOnClickListener(event -> start());
-        buttonRight.setOnClickListener(event -> right());
-        buttonLeft.setOnClickListener(event -> left());
-        buttonTurn.setOnClickListener(event -> turn());
-
+        buttonStart.setOnClickListener(view -> start());
+        buttonRight.setOnClickListener(view -> right());
+        buttonLeft.setOnClickListener(view -> left());
+        buttonTurn.setOnClickListener(view -> turn());
+        buttonDown.setOnClickListener(view -> down());
     }
 
     private void left() {
-        textView.append("left\n");
         bluetoothService.write(CMD_LEFT);
         scrollView.fullScroll(View.FOCUS_DOWN);
     }
 
     private void right() {
-        textView.append("right\n");
         bluetoothService.write(CMD_RIGHT);
         scrollView.fullScroll(View.FOCUS_DOWN);
     }
 
     private void turn() {
-        textView.setText("");
         bluetoothService.write(CMD_TURN);
+        scrollView.fullScroll(View.FOCUS_DOWN);
+    }
+
+    private void down() {
+        bluetoothService.write(CMD_DOWN);
         scrollView.fullScroll(View.FOCUS_DOWN);
     }
 
@@ -187,6 +192,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void level(byte level) {
         log("Level: " + level);
+        this.level = level;
         runOnUiThread(() -> textViewLevelValue.setText(String.valueOf(level)));
     }
 
