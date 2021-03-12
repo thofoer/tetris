@@ -14,6 +14,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -43,12 +44,14 @@ public class MainActivity extends AppCompatActivity {
     private TextView textView;
     private TextView textViewScoreValue;
     private TextView textViewLevelValue;
+    private ImageView imageView;
 
     private ScrollView scrollView;
 
     private int level = 1;
     private int score = 0;
 
+    private static final int[] TILE_IDS = {R.drawable.ic_tile_o, R.drawable.ic_tile_i, R.drawable.ic_tile_t, R.drawable.ic_tile_z, R.drawable.ic_tile_s, R.drawable.ic_tile_l, R.drawable.ic_tile_j};
 
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothService bluetoothService;
@@ -73,6 +76,8 @@ public class MainActivity extends AppCompatActivity {
         textViewScoreValue = findViewById(R.id.textViewScoreValue);
         textViewLevelValue = findViewById(R.id.textViewLevelValue);
         scrollView = findViewById(R.id.scrollView);
+        imageView =  findViewById(R.id.imageViewLogo);
+
         textViewScoreValue.setText(String.valueOf(score));
         textViewLevelValue.setText(String.valueOf(level));
         textView.setMovementMethod(new ScrollingMovementMethod());
@@ -175,6 +180,11 @@ public class MainActivity extends AppCompatActivity {
         bluetoothService = new BluetoothService(this, createReceiver());
         this.device = device;
         bluetoothService.startConnection(device);
+        try {
+            Thread.sleep(2000);
+        }
+        catch(InterruptedException x) {}
+        bluetoothService.write(CMD_START);
     }
 
     private Consumer<byte[]> createReceiver() {
@@ -185,6 +195,9 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 case MSG_SCORE:
                     score(bytes[1]);
+                    break;
+                case MSG_NEXT_TILE:
+                    nextTile(bytes[1]);
                     break;
             }
         };
@@ -200,7 +213,11 @@ public class MainActivity extends AppCompatActivity {
         log("score: " + score);
         this.score += points;
         runOnUiThread(() -> textViewScoreValue.setText(String.valueOf(this.score)));
+    }
 
+    private void nextTile(byte tileId) {
+        log("nextTile: " + tileId);
+        runOnUiThread(() -> imageView.setImageResource(TILE_IDS[tileId]));
     }
 
     private void discover() {

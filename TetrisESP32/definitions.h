@@ -10,6 +10,7 @@
 // an TetrisControl gesendete Messages
 #define MSG_LEVEL 'L'
 #define MSG_SCORE 'S'
+#define MSG_NEXT_TILE 'N'
 
 // Pixel ID in matrix-Array
 #define  EMPTY_PIX  0

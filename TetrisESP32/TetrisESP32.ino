@@ -14,18 +14,22 @@
 #define FRAME_TIME_MS 10
 #define FAST_DOWN_SPEED 10
 
+#define STATUS_WAIT 0
+#define STATUS_GAME 1
 
 CRGB leds[NUM_LEDS];
 
 BluetoothSerial SerialBT;
 
+int status = STATUS_WAIT;
 int level = 1;
 int tileId = 1;
+int nextTileId;
 int posX = 2;
 int posY = 0;
 int rot = 0;
 
-int speed = 100;
+int speed = 200;
 int fallCounter = speed;
 boolean fastDown = false;
 
@@ -39,6 +43,8 @@ void setup() {
   Serial.begin(115200);
   SerialBT.begin("Tetris"); // Bluetooth-Name des ESP32
   Serial.println("Der ESP32 ist bereit. Verbinde dich nun über Bluetooth.");  
+
+
   
   for (int x=0; x<WIDTH; x++) {
     for (int y=0; y<HEIGHT; y++) {
@@ -61,8 +67,10 @@ void loop() {
   receiveCommand();
   clearLeds();
   drawMatrix();
-  moveDown();
-  showTile();
+  if (status == STATUS_GAME) {
+    moveDown();
+    showTile();
+  }
   FastLED.show();  
   delay(FRAME_TIME_MS);
 }
@@ -84,6 +92,7 @@ void touchDown() {
   fastDown = false;
   posY = 0;
   posX = (WIDTH-4)/2;
+  nextTile();
 }
 
 void dumpTile() {
@@ -105,10 +114,10 @@ void dumpMatrix(int sx, int sy) {
 }
 
 boolean isCollision(int dRot, int dX, int dY) {
-  Serial.printf("-----------------\nrot=%d, coord=%d/%d\n", rot, posX, posY);
-  dumpTile();
-  Serial.printf("--\n");
-  dumpMatrix(posX+dX, posY+dY);
+ // Serial.printf("-----------------\nrot=%d, coord=%d/%d\n", rot, posX, posY);
+ // dumpTile();
+ // Serial.printf("--\n");
+//  dumpMatrix(posX+dX, posY+dY);
   boolean collision = false;
   for (int x=0; x<4 && !collision; x++) {
     for (int y=0; y<4 && !collision; y++) {
@@ -117,7 +126,7 @@ boolean isCollision(int dRot, int dX, int dY) {
          int backgroundPixel = matrix[posX+x+dX][posY+y+dY];
          if (backgroundPixel) {
            collision=true;
-           Serial.printf("Kollision: %d/%d - %d\n", x, y, backgroundPixel);
+          // Serial.printf("Kollision: %d/%d - %d\n", x, y, backgroundPixel);
          }
        }
     }
@@ -155,10 +164,41 @@ void left() {
    }
 }
 
+void nextTile() {
+  tileId = nextTileId;
+  nextTileId = random8() % 7;
+  sendNextTile();
+}
+
 void turn() {
-  if (!isCollision(1, 0, 0)) {
-    rot = (rot + 1) & 0x3;
+  
+  if (isCollision(1, 0, 0)) {    
+    Serial.printf("posX %d\n", posX);
+    if (posX<=0) {
+      
+      for (int x=1; x<4; x++) {
+        if (!isCollision(1, x, 0)) {
+          Serial.printf("rechts %d\n", x);
+           posX+=x;
+           rot = (rot + 1) & 0x3;
+           return;
+        }
+      }      
+    }
+    else if (posX>=WIDTH-4) {
+      for (int x=1; x<4; x++) {
+        if (!isCollision(1, -x, 0)) {
+          Serial.printf("links %d\n", x);
+           posX-=x;
+           rot = (rot + 1) & 0x3;
+           return;
+        }
+      }     
+    }
+     return;
   }
+   Serial.printf("keine kollision\n");
+  rot = (rot + 1) & 0x3;
 }
 
 void down() {
@@ -167,7 +207,10 @@ void down() {
 }
 
 void start() {
-  
+  tileId = random8() % 7;
+  nextTileId = random8() % 7;
+  sendNextTile();
+  status = STATUS_GAME;
 }
 
 void reset() {
@@ -185,6 +228,13 @@ void sendLevel() {
    uint8_t b[2];
    b[0] = MSG_LEVEL;
    b[1] = level;
+   SerialBT.write(b, 2);   
+}
+
+void sendNextTile() {
+   uint8_t b[2];
+   b[0] = MSG_NEXT_TILE;
+   b[1] = nextTileId;
    SerialBT.write(b, 2);   
 }
 
