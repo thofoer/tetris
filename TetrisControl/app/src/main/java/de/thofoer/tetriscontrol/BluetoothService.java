@@ -34,10 +34,12 @@ public class BluetoothService {
     private ConnectedThread connectedThread;
 
     private Consumer<byte[]>  receiver;
+    private Consumer<Exception> exceptionHandler;
 
-    public BluetoothService(Context context, Consumer<byte[]> receiver) {
+    public BluetoothService(Context context, Consumer<byte[]> receiver, Consumer<Exception> exceptionHandler) {
         this.context = context;
         this.receiver = receiver;
+        this.exceptionHandler = exceptionHandler;
         adapter = BluetoothAdapter.getDefaultAdapter();
     }
 
@@ -125,7 +127,6 @@ public class BluetoothService {
                 Log.e(TAG, "cancel: close() of socket in Connectthread failed. ", e);
             }
         }
-
     }
 
     /**
@@ -151,13 +152,13 @@ public class BluetoothService {
                 e.printStackTrace();
             }
 
-
             try {
                 tmpIn = socket.getInputStream();
                 tmpOut = socket.getOutputStream();
             }
             catch (IOException e) {
                 Log.d(TAG, "creating sockets: ", e);
+                exceptionHandler.accept(e);
             }
 
             inStream = tmpIn;
@@ -176,10 +177,12 @@ public class BluetoothService {
                     bytes = inStream.read(buffer);
                     receiver.accept(buffer);
                     String incomingMessage = new String(buffer, 0, bytes);
-                    Log.d(TAG, "InputStream: " + incomingMessage);
-                } catch (IOException e) {
+                    Log.d(TAG, "InputStream: " + incomingMessage+ " - "+bytes+" bytes");
+                }
+                catch (IOException e) {
                     Log.e(TAG, "write: Error reading Input Stream. ", e);
                     cancel();
+                    exceptionHandler.accept(e);
                     break;
                 }
             }
@@ -190,6 +193,8 @@ public class BluetoothService {
                 outStream.write(bytes);
             } catch (IOException e) {
                 Log.e(TAG, "write: Error writing to output stream. ", e);
+                cancel();
+                exceptionHandler.accept(e);
             }
         }
 

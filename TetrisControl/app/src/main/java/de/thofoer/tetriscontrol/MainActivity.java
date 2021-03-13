@@ -35,6 +35,7 @@ public class MainActivity extends AppCompatActivity {
     static final char MSG_LEVEL = 'L';
     static final char MSG_SCORE = 'S';
     static final char MSG_NEXT_TILE = 'N';
+    static final char MSG_GAME_OVER = 'O';
 
     private ImageButton buttonLeft;
     private ImageButton buttonRight;
@@ -50,8 +51,13 @@ public class MainActivity extends AppCompatActivity {
 
     private int level = 1;
     private int score = 0;
+    private boolean gameRunning = false;
 
-    private static final int[] TILE_IDS = {R.drawable.ic_tile_o, R.drawable.ic_tile_i, R.drawable.ic_tile_t, R.drawable.ic_tile_z, R.drawable.ic_tile_s, R.drawable.ic_tile_l, R.drawable.ic_tile_j};
+    private static final int[] TILE_IDS = {
+            R.drawable.ic_tile_o, R.drawable.ic_tile_i, R.drawable.ic_tile_t,
+            R.drawable.ic_tile_z, R.drawable.ic_tile_s,
+            R.drawable.ic_tile_l, R.drawable.ic_tile_j
+    };
 
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothService bluetoothService;
@@ -76,37 +82,51 @@ public class MainActivity extends AppCompatActivity {
         textViewScoreValue = findViewById(R.id.textViewScoreValue);
         textViewLevelValue = findViewById(R.id.textViewLevelValue);
         scrollView = findViewById(R.id.scrollView);
-        imageView =  findViewById(R.id.imageViewLogo);
+        imageView = findViewById(R.id.imageViewLogo);
 
         textViewScoreValue.setText(String.valueOf(score));
         textViewLevelValue.setText(String.valueOf(level));
         textView.setMovementMethod(new ScrollingMovementMethod());
 
-        buttonStart.setOnClickListener(view -> start());
+        buttonStart.setOnClickListener(view -> startOrReset());
         buttonRight.setOnClickListener(view -> right());
         buttonLeft.setOnClickListener(view -> left());
         buttonTurn.setOnClickListener(view -> turn());
         buttonDown.setOnClickListener(view -> down());
+        enableButtons(false);
     }
 
     private void left() {
         bluetoothService.write(CMD_LEFT);
-        scrollView.fullScroll(View.FOCUS_DOWN);
     }
 
     private void right() {
         bluetoothService.write(CMD_RIGHT);
-        scrollView.fullScroll(View.FOCUS_DOWN);
     }
 
     private void turn() {
         bluetoothService.write(CMD_TURN);
-        scrollView.fullScroll(View.FOCUS_DOWN);
     }
 
     private void down() {
         bluetoothService.write(CMD_DOWN);
-        scrollView.fullScroll(View.FOCUS_DOWN);
+    }
+
+    private void startOrReset() {
+        if (gameRunning) {
+            reset();
+        } else {
+            start();
+        }
+    }
+
+    private void reset() {
+        bluetoothService.write(CMD_RESET);
+        gameRunning = false;
+        runOnUiThread(() -> {
+            buttonStart.setText(R.string.start);
+            imageView.setImageResource(R.drawable.ic_tetris);
+        });
     }
 
     private void start() {
@@ -119,6 +139,8 @@ public class MainActivity extends AppCompatActivity {
             registerReceiver(turnOnReceiver, intentFilter);
         } else if (device == null) {
             discover();
+        } else {
+            startGame();
         }
     }
 
@@ -129,7 +151,6 @@ public class MainActivity extends AppCompatActivity {
             textView.append("\n");
             scrollView.fullScroll(View.FOCUS_DOWN);
         });
-
     }
 
     @Override
@@ -137,15 +158,19 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
         if (turnOnReceiver != null) {
             unregisterReceiver(turnOnReceiver);
+            turnOnReceiver = null;
         }
         if (discoverReceiver != null) {
             unregisterReceiver(discoverReceiver);
+            discoverReceiver = null;
         }
         if (bondingReceiver != null) {
             unregisterReceiver(bondingReceiver);
+            bondingReceiver = null;
         }
         if (bluetoothService != null) {
             bluetoothService.destroy();
+            bluetoothService = null;
         }
     }
 
@@ -177,14 +202,59 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startBluetoothService(BluetoothDevice device) {
-        bluetoothService = new BluetoothService(this, createReceiver());
+        bluetoothService = new BluetoothService(this, createReceiver(), createExceptionHandler());
         this.device = device;
         bluetoothService.startConnection(device);
         try {
             Thread.sleep(2000);
+        } catch (InterruptedException x) {
         }
-        catch(InterruptedException x) {}
+        startGame();
+    }
+
+
+    private void startGame() {
+        runOnUiThread(() -> {
+            textViewLevelValue.setText("1");
+            textViewScoreValue.setText("0");
+            enableButtons(true);
+            buttonStart.setText(R.string.reset);
+        });
+        gameRunning = true;
+        score = 0;
+        level = 1;
         bluetoothService.write(CMD_START);
+    }
+
+    private void level(byte level) {
+        log("Level: " + level);
+        this.level = level;
+        runOnUiThread(() -> textViewLevelValue.setText(String.valueOf(level)));
+    }
+
+    private void score(byte points) {
+        log("score: " + points);
+        this.score += points;
+        runOnUiThread(() -> textViewScoreValue.setText(String.valueOf(this.score)));
+    }
+
+    private void nextTile(byte tileId) {
+        log("nextTile: " + tileId);
+        runOnUiThread(() -> imageView.setImageResource(TILE_IDS[tileId]));
+    }
+
+    private Consumer<Exception> createExceptionHandler() {
+        return (exception) -> {
+            log("Exception in Connection service: " + exception.getMessage());
+            this.device = null;
+            bluetoothService.destroy();
+            bluetoothService = null;
+            gameRunning = false;
+            enableButtons(false);
+            runOnUiThread(() -> {
+                buttonStart.setText(R.string.start);
+            });
+        };
     }
 
     private Consumer<byte[]> createReceiver() {
@@ -199,25 +269,26 @@ public class MainActivity extends AppCompatActivity {
                 case MSG_NEXT_TILE:
                     nextTile(bytes[1]);
                     break;
+                case MSG_GAME_OVER:
+                    gameOver();
+                    break;
             }
         };
     }
 
-    private void level(byte level) {
-        log("Level: " + level);
-        this.level = level;
-        runOnUiThread(() -> textViewLevelValue.setText(String.valueOf(level)));
+    private void gameOver() {
+        log("Game Over");
+        enableButtons(false);
+        runOnUiThread(() -> imageView.setImageResource(R.drawable.ic_gameover));
     }
 
-    private void score(byte points) {
-        log("score: " + score);
-        this.score += points;
-        runOnUiThread(() -> textViewScoreValue.setText(String.valueOf(this.score)));
-    }
-
-    private void nextTile(byte tileId) {
-        log("nextTile: " + tileId);
-        runOnUiThread(() -> imageView.setImageResource(TILE_IDS[tileId]));
+    private void enableButtons(boolean enabled) {
+        runOnUiThread(() -> {
+            buttonDown.setClickable(enabled);
+            buttonLeft.setClickable(enabled);
+            buttonRight.setClickable(enabled);
+            buttonTurn.setClickable(enabled);
+        });
     }
 
     private void discover() {

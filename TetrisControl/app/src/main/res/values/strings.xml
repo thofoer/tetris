@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">TetrisControl</string>
     <string name="start">Start</string>
+    <string name="reset">Reset</string>
     <string name="logo">Logo</string>
     <string name="move_left">Move left</string>
     <string name="turn">Turn</string>

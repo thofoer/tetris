@@ -11,6 +11,7 @@
 #define MSG_LEVEL 'L'
 #define MSG_SCORE 'S'
 #define MSG_NEXT_TILE 'N'
+#define MSG_GAME_OVER 'O'
 
 // Pixel ID in matrix-Array
 #define  EMPTY_PIX  0

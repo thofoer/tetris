@@ -35,6 +35,8 @@ boolean fastDown = false;
 
 int matrix[WIDTH][HEIGHT];
 
+const int scores[4] = { 1, 3, 6, 10 };
+
 void setup() {
   delay( 1000 ); // power-up safety delay
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
@@ -44,24 +46,11 @@ void setup() {
   SerialBT.begin("Tetris"); // Bluetooth-Name des ESP32
   Serial.println("Der ESP32 ist bereit. Verbinde dich nun über Bluetooth.");  
 
-
-  
-  for (int x=0; x<WIDTH; x++) {
-    for (int y=0; y<HEIGHT; y++) {
-      matrix[x][y] = EMPTY_PIX;
-      leds[x*WIDTH+y] = CRGB::Black;
-    }
-  }  
-
-// Frame in matrix zeichnen
-  for (int i=0; i<HEIGHT; i++) {
-    matrix[0][i] = FRAME_PIX;
-    matrix[WIDTH-1][i] = FRAME_PIX;
-  }
-  for (int i=1; i<WIDTH-1; i++) {
-    matrix[i][HEIGHT-1] = FRAME_PIX;
-  }
+  resetMatrix();
 }
+
+
+
 
 void loop() {  
   receiveCommand();
@@ -90,9 +79,58 @@ void moveDown() {
 
 void touchDown() {
   fastDown = false;
-  posY = 0;
-  posX = (WIDTH-4)/2;
+  copyTileToMatrix();
+  removeCompleteRows();
   nextTile();
+}
+
+void removeCompleteRows() {
+  int rowsRemoved = 0;
+  
+  for (int y=0; y<HEIGHT-1; y++) {
+    rowsRemoved += testAndRemoveRow(y); 
+  }
+  if (rowsRemoved) {
+    sendScore(scores[rowsRemoved-1]);
+  }
+}
+
+int testAndRemoveRow(int row){
+  //dumpMatrix();
+  // Testen, ob Zeile vollständig gefüllt.
+   for (int x=1; x<WIDTH-1; x++) {
+     if (!matrix[x][row]) {       
+      //Serial.printf("zeile %d nicht voll\n", row);
+       return 0; // nein
+     }
+   }
+   // Zeile löschen
+   Serial.printf("zeile %d löschen\n", row);
+   for (int y=row-1; y>=0; y--) {
+     for (int x=1; x<WIDTH-1; x++) {
+       matrix[x][y+1] = matrix[x][y];
+     }
+   }
+   for (int x=1; x<WIDTH-1; x++) {
+     matrix[x][0] = 0;
+   }
+   return 1;
+}
+
+void gameOver() {
+  status = STATUS_WAIT;   
+  sendGameOver();
+}
+
+void copyTileToMatrix() {
+  for (int y=0; y<4; y++) {
+    for (int x=0; x<4; x++) {
+      int pixel = tiles[rot][tileId][y][x] * (tileId+1);
+      if (pixel){
+        matrix[posX+x][posY+y] = pixel;   
+      }
+    }
+  }
 }
 
 void dumpTile() {
@@ -102,6 +140,17 @@ void dumpTile() {
     }
     Serial.printf("\n");
   }
+}
+
+
+void dumpMatrix() {
+  for (int y=0; y<HEIGHT; y++) {
+    for (int x=0; x<WIDTH; x++) {
+      Serial.printf("%d", matrix[x][y]);
+    }
+    Serial.printf("\n");
+  }
+   Serial.printf("----------------\n");
 }
 
 void dumpMatrix(int sx, int sy) {
@@ -167,7 +216,16 @@ void left() {
 void nextTile() {
   tileId = nextTileId;
   nextTileId = random8() % 7;
-  sendNextTile();
+  rot = tileId<=4 ? 0 : 1;  // Teile L und J können um 90° gedreht erscheinen, um Platz zu sparen.
+  posX = (WIDTH-4)/2;  
+  posY = -1; 
+  
+  if (isCollision(0, 0, 0)) {
+    gameOver();
+  }
+  else {
+    sendNextTile();
+  }
 }
 
 void turn() {
@@ -196,8 +254,7 @@ void turn() {
       }     
     }
      return;
-  }
-   Serial.printf("keine kollision\n");
+  }   
   rot = (rot + 1) & 0x3;
 }
 
@@ -207,6 +264,7 @@ void down() {
 }
 
 void start() {
+  resetMatrix();
   tileId = random8() % 7;
   nextTileId = random8() % 7;
   sendNextTile();
@@ -214,13 +272,15 @@ void start() {
 }
 
 void reset() {
-  
+  resetMatrix();
+  status = STATUS_WAIT;
 }
 
 void sendScore(int points) {
    uint8_t b[2];
    b[0] = MSG_SCORE;
    b[1] = points;
+   Serial.printf("send score %d\n", points);
    SerialBT.write(b, 2);  
 }
 
@@ -236,6 +296,32 @@ void sendNextTile() {
    b[0] = MSG_NEXT_TILE;
    b[1] = nextTileId;
    SerialBT.write(b, 2);   
+}
+
+void sendGameOver() {
+  Serial.printf("Game over\n");
+  uint8_t b[2];
+   b[0] = MSG_GAME_OVER;
+   b[1] = 0;
+   SerialBT.write(b, 2);   
+}
+
+void resetMatrix() {   
+  for (int x=1; x<WIDTH-1; x++) {
+    for (int y=0; y<HEIGHT-1; y++) {
+      matrix[x][y] = EMPTY_PIX;
+      leds[x*WIDTH+y] = CRGB::Black;
+    }
+  }  
+
+  // Frame in matrix zeichnen
+  for (int i=0; i<HEIGHT; i++) {
+    matrix[0][i] = FRAME_PIX;
+    matrix[WIDTH-1][i] = FRAME_PIX;
+  }
+  for (int i=1; i<WIDTH-1; i++) {
+    matrix[i][HEIGHT-1] = FRAME_PIX;
+  }
 }
 
 void showTile() {
