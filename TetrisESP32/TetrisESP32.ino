@@ -2,7 +2,6 @@
 #include <FastLED.h>
 #include "definitions.h"
 
-
 #define WIDTH 8
 #define HEIGHT 8
 #define NUM_LEDS (WIDTH*HEIGHT)
@@ -13,6 +12,8 @@
 #define COLOR_ORDER GRB
 #define FRAME_TIME_MS 10
 #define FAST_DOWN_SPEED 10
+#define LEVEL_TIME_TICKS 30000
+#define START_SPEED 200
 
 #define STATUS_WAIT 0
 #define STATUS_GAME 1
@@ -29,9 +30,11 @@ int posX = 2;
 int posY = 0;
 int rot = 0;
 
-int speed = 200;
+int speed = START_SPEED;
 int fallCounter = speed;
 boolean fastDown = false;
+
+TickType_t levelTimestamp;
 
 int matrix[WIDTH][HEIGHT];
 
@@ -50,8 +53,6 @@ void setup() {
 }
 
 
-
-
 void loop() {  
   receiveCommand();
   clearLeds();
@@ -59,9 +60,21 @@ void loop() {
   if (status == STATUS_GAME) {
     moveDown();
     showTile();
+    levelUp();
   }
   FastLED.show();  
   delay(FRAME_TIME_MS);
+}
+
+void levelUp() {
+    TickType_t now = xTaskGetTickCount();
+    if ( (now-levelTimestamp) >= LEVEL_TIME_TICKS) {
+       level++;
+       sendLevel();
+       speed = (9*speed) / 10;
+       levelTimestamp = now;
+       Serial.printf("Levelup %d - speed: %d\n", level, speed);
+    }
 }
 
 void moveDown() {
@@ -172,7 +185,7 @@ boolean isCollision(int dRot, int dX, int dY) {
     for (int y=0; y<4 && !collision; y++) {
        int tilePixel = tiles[(rot+dRot)&0x3][tileId][y][x];
        if (tilePixel) {
-         int backgroundPixel = matrix[posX+x+dX][posY+y+dY];
+         int backgroundPixel =  matrix[posX+x+dX][posY+y+dY];
          if (backgroundPixel) {
            collision=true;
           // Serial.printf("Kollision: %d/%d - %d\n", x, y, backgroundPixel);
@@ -218,7 +231,7 @@ void nextTile() {
   nextTileId = random8() % 7;
   rot = tileId<=4 ? 0 : 1;  // Teile L und J können um 90° gedreht erscheinen, um Platz zu sparen.
   posX = (WIDTH-4)/2;  
-  posY = -1; 
+  posY = 0; 
   
   if (isCollision(0, 0, 0)) {
     gameOver();
@@ -264,6 +277,11 @@ void down() {
 }
 
 void start() {
+  levelTimestamp = xTaskGetTickCount();
+  speed = START_SPEED;
+  fallCounter = speed;
+  fastDown = false;
+  level = 1;
   resetMatrix();
   tileId = random8() % 7;
   nextTileId = random8() % 7;
