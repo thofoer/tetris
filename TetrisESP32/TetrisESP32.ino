@@ -2,18 +2,18 @@
 #include <FastLED.h>
 #include "definitions.h"
 
-#define WIDTH 8
-#define HEIGHT 8
+#define WIDTH 16
+#define HEIGHT 16
 #define NUM_LEDS (WIDTH*HEIGHT)
 
 #define LED_PIN     5
-#define BRIGHTNESS  32
+#define BRIGHTNESS  64
 #define LED_TYPE    WS2811
 #define COLOR_ORDER GRB
 #define FRAME_TIME_MS 10
-#define FAST_DOWN_SPEED 10
+#define FAST_DOWN_SPEED 3
 #define LEVEL_TIME_TICKS 30000
-#define START_SPEED 200
+#define START_SPEED 180
 
 #define STATUS_WAIT 0
 #define STATUS_GAME 1
@@ -71,7 +71,7 @@ void levelUp() {
     if ( (now-levelTimestamp) >= LEVEL_TIME_TICKS) {
        level++;
        sendLevel();
-       speed = (9*speed) / 10;
+       speed = (8*speed) / 10;
        levelTimestamp = now;
        Serial.printf("Levelup %d - speed: %d\n", level, speed);
     }
@@ -363,7 +363,8 @@ void drawMatrix() {
   }
 }
 
-void setLed(int x, int y, CRGB color) {
+void setLed(int y, int x, CRGB color) {
+  y=WIDTH-y-1;
   int i = y*WIDTH;
   i += (y&1) ? x : (WIDTH-x-1);
   leds[i] = color;
