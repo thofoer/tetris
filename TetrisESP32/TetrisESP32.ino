@@ -7,7 +7,7 @@
 #define NUM_LEDS (WIDTH*HEIGHT)
 
 #define LED_PIN     5
-#define BRIGHTNESS  64
+#define BRIGHTNESS  255
 #define LED_TYPE    WS2811
 #define COLOR_ORDER GRB
 #define FRAME_TIME_MS 10
@@ -55,6 +55,10 @@ void setup() {
 
 void loop() {  
   receiveCommand();
+  if (status == STATUS_WAIT) {
+    screensaver();
+    return;
+  }
   clearLeds();
   drawMatrix();
   if (status == STATUS_GAME) {
@@ -374,6 +378,30 @@ void clearLeds() {
   for (int x=0; x<WIDTH; x++) {
     for (int y=0; y<HEIGHT; y++) {   
       leds[x*WIDTH+y] = CRGB::Black;
+    }
+  }
+}
+
+
+// =======================================================================
+
+void screensaver() {
+    uint32_t ms = millis();
+    int32_t yHueDelta32 = ((int32_t)cos16( ms * (27/1) ) * (350 / WIDTH));
+    int32_t xHueDelta32 = ((int32_t)cos16( ms * (39/1) ) * (310 / HEIGHT));
+    DrawOneFrame( ms / 65536, yHueDelta32 / 32768, xHueDelta32 / 32768);
+
+    FastLED.show();
+}
+
+void DrawOneFrame( byte startHue8, int8_t yHueDelta8, int8_t xHueDelta8) {
+  byte lineStartHue = startHue8;
+  for( byte y = 0; y < HEIGHT; y++) {
+    lineStartHue += yHueDelta8;
+    byte pixelHue = lineStartHue;      
+    for( byte x = 0; x < WIDTH; x++) {
+      pixelHue += xHueDelta8;
+      setLed(y, x, CHSV( pixelHue, 255, 155));      
     }
   }
 }
