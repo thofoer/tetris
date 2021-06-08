@@ -31,6 +31,7 @@ public class MainActivity extends AppCompatActivity {
     static final char CMD_DOWN = 'd';
     static final char CMD_START = 's';
     static final char CMD_RESET = 'x';
+    static final char CMD_AUTO = 'a';
 
     static final char MSG_LEVEL = 'L';
     static final char MSG_SCORE = 'S';
@@ -42,6 +43,7 @@ public class MainActivity extends AppCompatActivity {
     private ImageButton buttonTurn;
     private ImageButton buttonDown;
     private Button buttonStart;
+    private Button buttonAuto;
     private TextView textView;
     private TextView textViewScoreValue;
     private TextView textViewLevelValue;
@@ -78,6 +80,7 @@ public class MainActivity extends AppCompatActivity {
         buttonTurn = findViewById(R.id.buttonTurn);
         buttonDown = findViewById(R.id.buttonDown);
         buttonStart = findViewById(R.id.buttonStart);
+        buttonAuto = findViewById(R.id.buttonAuto);
         textView = findViewById(R.id.textView);
         textViewScoreValue = findViewById(R.id.textViewScoreValue);
         textViewLevelValue = findViewById(R.id.textViewLevelValue);
@@ -89,6 +92,7 @@ public class MainActivity extends AppCompatActivity {
         textView.setMovementMethod(new ScrollingMovementMethod());
 
         buttonStart.setOnClickListener(view -> startOrReset());
+        buttonAuto.setOnClickListener(view -> auto());
         buttonRight.setOnClickListener(view -> right());
         buttonLeft.setOnClickListener(view -> left());
         buttonTurn.setOnClickListener(view -> turn());
@@ -119,8 +123,13 @@ public class MainActivity extends AppCompatActivity {
             start();
         }
     }
+    private void auto() {
+        bluetoothService.write(CMD_AUTO);
+    }
 
     private void reset() {
+        level = 1;
+        score = 0;
         bluetoothService.write(CMD_RESET);
         gameRunning = false;
         runOnUiThread(() -> {

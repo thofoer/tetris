@@ -14,9 +14,11 @@
 #define FAST_DOWN_SPEED 3
 #define LEVEL_TIME_TICKS 30000
 #define START_SPEED 180
+#define AUTO_MOVE_SPEED 6
 
 #define STATUS_WAIT 0
 #define STATUS_GAME 1
+#define STATUS_AUTO 2
 
 CRGB leds[NUM_LEDS];
 
@@ -30,13 +32,18 @@ int posX = 2;
 int posY = 0;
 int rot = 0;
 
+int targetRot = -1;
+int targetX = -1;
+
 int speed = START_SPEED;
 int fallCounter = speed;
 boolean fastDown = false;
 
 TickType_t levelTimestamp;
-
+ 
 int matrix[WIDTH][HEIGHT];
+int shadowMatrix[WIDTH][HEIGHT];
+int dumpMatrix[WIDTH][HEIGHT];
 
 const int scores[4] = { 1, 3, 6, 10 };
 
@@ -53,15 +60,21 @@ void setup() {
 }
 
 
-void loop() {  
+void loop() {    
   receiveCommand();
+  
   if (status == STATUS_WAIT) {
     screensaver();
     return;
   }
   clearLeds();
   drawMatrix();
-  if (status == STATUS_GAME) {
+  
+  if (status == STATUS_AUTO) {
+    autoMove();
+  }
+  if (status != STATUS_WAIT) {
+    
     moveDown();
     showTile();
     levelUp();
@@ -70,6 +83,61 @@ void loop() {
   delay(FRAME_TIME_MS);
 }
 
+
+void autoMove() {
+  if (fallCounter % AUTO_MOVE_SPEED  != 0) {
+    return;
+  }
+  if (targetRot!=rot) {
+    if (!turn()) {
+      down();
+    }
+  }
+  else if (targetX>posX) {
+    right();
+  }
+  else if (targetX<posX) {
+    left();
+  }  
+  else {
+    down();
+  }
+}
+
+void calculateTarget() {
+
+  int bestScore = -10000000;
+  int destRot;
+  int destX;
+  
+  for (int r=0; r<rotationsDegrees[tileId]; r++) {
+    for (int x=-2; x<WIDTH; x++) {
+      int y=0;
+      memcpy(shadowMatrix, matrix, sizeof(matrix));
+      while (!isCollisionAbs(r, x, y, shadowMatrix) ) {
+        y++;        
+      }
+      y--;
+     
+      if (y>0) {
+     //    Serial.printf("r=%d x=%d y=%d\n", r, x, y);
+         int score = rate(shadowMatrix, r, x, y);
+         if (score>bestScore) {
+          bestScore=score;
+          destRot = r;
+          destX = x;
+         }
+      }
+    }
+  }
+  Serial.printf("score=%d   rot=%d   x=%d\n", bestScore, destRot, destX);
+  targetX = destX;
+  targetRot = destRot;
+  Serial.println("---------------------------------");
+}
+
+
+
 void levelUp() {
     TickType_t now = xTaskGetTickCount();
     if ( (now-levelTimestamp) >= LEVEL_TIME_TICKS) {
@@ -77,14 +145,14 @@ void levelUp() {
        sendLevel();
        speed = (8*speed) / 10;
        levelTimestamp = now;
-       Serial.printf("Levelup %d - speed: %d\n", level, speed);
+       //Serial.printf("Levelup %d - speed: %d\n", level, speed);
     }
 }
 
 void moveDown() {
   fallCounter--;
   if (fallCounter<=0) {
-    if (!isCollision(0, 0, 1)) {
+    if (!isCollision(0, 0, 1, matrix)) {
       posY++;
     }
     else {
@@ -97,26 +165,26 @@ void moveDown() {
 void touchDown() {
   fastDown = false;
   copyTileToMatrix();
-  removeCompleteRows();
+  removeCompleteRows(matrix);
   nextTile();
 }
 
-void removeCompleteRows() {
+void removeCompleteRows(int mat[WIDTH][HEIGHT]) {
   int rowsRemoved = 0;
   
   for (int y=0; y<HEIGHT-1; y++) {
-    rowsRemoved += testAndRemoveRow(y); 
+    rowsRemoved += testAndRemoveRow(y, mat); 
   }
   if (rowsRemoved) {
     sendScore(scores[rowsRemoved-1]);
   }
 }
 
-int testAndRemoveRow(int row){
+int testAndRemoveRow(int row, int mat[WIDTH][HEIGHT]){
   //dumpMatrix();
   // Testen, ob Zeile vollständig gefüllt.
    for (int x=1; x<WIDTH-1; x++) {
-     if (!matrix[x][row]) {       
+     if (!mat[x][row]) {       
       //Serial.printf("zeile %d nicht voll\n", row);
        return 0; // nein
      }
@@ -125,11 +193,11 @@ int testAndRemoveRow(int row){
    Serial.printf("zeile %d löschen\n", row);
    for (int y=row-1; y>=0; y--) {
      for (int x=1; x<WIDTH-1; x++) {
-       matrix[x][y+1] = matrix[x][y];
+       mat[x][y+1] = mat[x][y];
      }
    }
    for (int x=1; x<WIDTH-1; x++) {
-     matrix[x][0] = 0;
+     mat[x][0] = 0;
    }
    return 1;
 }
@@ -160,17 +228,83 @@ void dumpTile() {
 }
 
 
-void dumpMatrix() {
+int rate(int mat[WIDTH][HEIGHT], int r, int px, int py) {
+  int score = 0;
+  memcpy(dumpMatrix, mat, sizeof(dumpMatrix));
+
+ // Serial.printf("r=%d x=%d y=%d  \n", r, px, py);
+  
+  for (int y=0; y<4; y++) {
+    for (int x=0; x<4; x++) {
+      int pixel = tiles[r][tileId][y][x] * (tileId+1);
+      if (pixel){
+        dumpMatrix[px+x][py+y] = 9;   
+      }
+    }
+  }
+  int rowsRemoved = 0;
+  
+  for (int y=0; y<HEIGHT-1; y++) {
+    if (countFilled(y, dumpMatrix)==WIDTH-2) {
+      rowsRemoved++;
+    }
+  }
+
+
+  int allHoles = 0;
+  for (int x=1; x<WIDTH-1; x++) {
+    int y=HEIGHT-2;
+    int holes = 0;
+    int endY = 0;
+    while(dumpMatrix[x][endY]==0) {
+      endY++;
+    }
+    while(y>=endY) {
+      if (dumpMatrix[x][y]==0) {
+        holes++;
+      }
+      y--;
+    }
+   // Serial.printf("HOLES=%d x=%d\n", holes, x);
+    if (holes<HEIGHT-2) {
+      allHoles+=holes;
+    }
+
+  }
+  int highest = 0;
+  while( countFilled(highest, dumpMatrix)==0) {
+    highest++;
+  }
+  highest = HEIGHT-highest-1;
+  
+  /*
   for (int y=0; y<HEIGHT; y++) {
     for (int x=0; x<WIDTH; x++) {
-      Serial.printf("%d", matrix[x][y]);
+      Serial.printf("%d", dumpMatrix[x][y]);
     }
     Serial.printf("\n");
   }
-   Serial.printf("----------------\n");
+  Serial.printf("rowsRem=%d  holes=%d  highest=%d   score=%d\n",rowsRemoved, allHoles, highest, (10*rowsRemoved - allHoles*5 - highest - (HEIGHT-py)) );
+
+  
+  
+  Serial.printf("----------------\n");
+  */
+  
+    return 10*rowsRemoved - allHoles*5 - highest - (HEIGHT-py);
 }
 
-void dumpMatrix(int sx, int sy) {
+int countFilled(int row, int mat[WIDTH][HEIGHT]) {
+  int filled = 0;
+  for (int x=1; x<WIDTH-1; x++) {
+    if (mat[x][row]!=0) {
+      filled++;
+    }
+  }
+  return filled;
+}
+
+void dumpMat(int sx, int sy) {
   for (int y=0; y<4; y++) {
     for (int x=0; x<4; x++) {
       Serial.printf("%d", matrix[sx+x][sy+y]);
@@ -179,7 +313,7 @@ void dumpMatrix(int sx, int sy) {
   }
 }
 
-boolean isCollision(int dRot, int dX, int dY) {
+boolean isCollision(int dRot, int dX, int dY, int mat[WIDTH][HEIGHT]) {
  // Serial.printf("-----------------\nrot=%d, coord=%d/%d\n", rot, posX, posY);
  // dumpTile();
  // Serial.printf("--\n");
@@ -189,7 +323,7 @@ boolean isCollision(int dRot, int dX, int dY) {
     for (int y=0; y<4 && !collision; y++) {
        int tilePixel = tiles[(rot+dRot)&0x3][tileId][y][x];
        if (tilePixel) {
-         int backgroundPixel =  matrix[posX+x+dX][posY+y+dY];
+         int backgroundPixel =  mat[posX+x+dX][posY+y+dY];
          if (backgroundPixel) {
            collision=true;
           // Serial.printf("Kollision: %d/%d - %d\n", x, y, backgroundPixel);
@@ -200,6 +334,21 @@ boolean isCollision(int dRot, int dX, int dY) {
   return collision;
 }
 
+boolean isCollisionAbs(int absRot, int absX, int absY, int mat[WIDTH][HEIGHT]) {
+  boolean collision = false;
+  for (int x=0; x<4 && !collision; x++) {
+    for (int y=0; y<4 && !collision; y++) {
+       int tilePixel = tiles[absRot][tileId][y][x];
+       if (tilePixel) {
+         int backgroundPixel =  mat[absX+x][absY+y];
+         if (backgroundPixel) {
+           collision=true;          
+         }
+       }
+    }
+  }
+  return collision;
+}
 
 void receiveCommand() {
   char input;
@@ -213,19 +362,36 @@ void receiveCommand() {
       case CMD_DOWN:  down();  break;
       case CMD_START: start(); break;
       case CMD_RESET: reset(); break;
+      case CMD_AUTO: toggleAuto(); break;
     }
   }
 }
 
+void toggleAuto() {
+  Serial.printf("toggle auto!\n");
+  if (status==STATUS_GAME) {
+    status=STATUS_AUTO;
+    Serial.printf("auto!\n");
+  }
+  else if (status==STATUS_AUTO) {
+    status=STATUS_GAME;
+    Serial.printf("game!\n");
+  }
+  else {
+    Serial.printf("start!\n");
+     start();
+     status=STATUS_AUTO;
+  }
+}
 
 void right() {
-   if (!isCollision(0, 1, 0)) {
+   if (!isCollision(0, 1, 0, matrix)) {
      posX+=1;
    }
 }
 
 void left() {
-   if (!isCollision(0, -1, 0)) {
+   if (!isCollision(0, -1, 0, matrix)) {
      posX-=1;
    }
 }
@@ -237,42 +403,43 @@ void nextTile() {
   posX = (WIDTH-4)/2;  
   posY = 0; 
   
-  if (isCollision(0, 0, 0)) {
+  if (isCollision(0, 0, 0, matrix)) {
     gameOver();
   }
   else {
     sendNextTile();
   }
+  calculateTarget();
 }
 
-void turn() {
+boolean turn() {
   
-  if (isCollision(1, 0, 0)) {    
-    Serial.printf("posX %d\n", posX);
+  if (isCollision(1, 0, 0, matrix)) {    
+    //Serial.printf("posX %d\n", posX);
     if (posX<=0) {
       
       for (int x=1; x<4; x++) {
-        if (!isCollision(1, x, 0)) {
-          Serial.printf("rechts %d\n", x);
+        if (!isCollision(1, x, 0, matrix)) {
+          
            posX+=x;
            rot = (rot + 1) & 0x3;
-           return;
+           return true;
         }
       }      
     }
     else if (posX>=WIDTH-4) {
       for (int x=1; x<4; x++) {
-        if (!isCollision(1, -x, 0)) {
-          Serial.printf("links %d\n", x);
+        if (!isCollision(1, -x, 0, matrix)) {          
            posX-=x;
            rot = (rot + 1) & 0x3;
-           return;
+           return true;
         }
       }     
     }
-     return;
+     return false;
   }   
   rot = (rot + 1) & 0x3;
+  return true;
 }
 
 void down() {
@@ -289,6 +456,7 @@ void start() {
   resetMatrix();
   tileId = random8() % 7;
   nextTileId = random8() % 7;
+  calculateTarget();
   sendNextTile();
   status = STATUS_GAME;
 }

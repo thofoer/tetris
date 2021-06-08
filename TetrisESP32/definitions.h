@@ -6,6 +6,7 @@
 #define CMD_DOWN 'd'
 #define CMD_START 's'
 #define CMD_RESET 'x'
+#define CMD_AUTO 'a'
 
 // an TetrisControl gesendete Messages
 #define MSG_LEVEL 'L'
@@ -198,3 +199,5 @@ const int tiles[4][7][4][4] ={
                      }};
 
 const CRGB colors[9] = {CRGB::Black, COLOR_TILE_O, COLOR_TILE_I, COLOR_TILE_T, COLOR_TILE_Z, COLOR_TILE_S, COLOR_TILE_L, COLOR_TILE_J, COLOR_FRAME };
+
+const int rotationsDegrees[7] = {1, 2, 4, 2, 2, 4, 4};
