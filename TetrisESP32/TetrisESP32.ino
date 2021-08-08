@@ -13,6 +13,7 @@
 #define FRAME_TIME_MS 10
 #define FAST_DOWN_SPEED 3
 #define LEVEL_TIME_TICKS 30000
+#define PHASE_TIME_TICKS 20000
 #define START_SPEED 180
 #define AUTO_MOVE_SPEED 6
 
@@ -31,6 +32,7 @@ int nextTileId;
 int posX = 2;
 int posY = 0;
 int rot = 0;
+int moveSpeed = 12;
 
 int targetRot = -1;
 int targetX = -1;
@@ -40,6 +42,7 @@ int fallCounter = speed;
 boolean fastDown = false;
 
 TickType_t levelTimestamp;
+TickType_t phaseTimestamp;
  
 int matrix[WIDTH][HEIGHT];
 int shadowMatrix[WIDTH][HEIGHT];
@@ -55,7 +58,8 @@ void setup() {
   Serial.begin(115200);
   SerialBT.begin("Tetris"); // Bluetooth-Name des ESP32
   Serial.println("Der ESP32 ist bereit. Verbinde dich nun über Bluetooth.");  
-
+  
+  phaseTimestamp = xTaskGetTickCount();
   resetMatrix();
 }
 
@@ -65,6 +69,14 @@ void loop() {
   
   if (status == STATUS_WAIT) {
     screensaver();
+    TickType_t now = xTaskGetTickCount();
+    if ( (now-phaseTimestamp) >= PHASE_TIME_TICKS) {
+       phaseTimestamp = now;
+       levelTimestamp = now;
+       moveSpeed=12;
+       start();
+       status = STATUS_AUTO;
+    }
     return;
   }
   clearLeds();
@@ -85,7 +97,7 @@ void loop() {
 
 
 void autoMove() {
-  if (fallCounter % AUTO_MOVE_SPEED  != 0) {
+  if (fallCounter % moveSpeed != 0) {
     return;
   }
   if (targetRot!=rot) {
@@ -145,7 +157,17 @@ void levelUp() {
        sendLevel();
        speed = (8*speed) / 10;
        levelTimestamp = now;
-       //Serial.printf("Levelup %d - speed: %d\n", level, speed);
+       Serial.printf("Levelup %d - speed: %d\n", level, speed);
+       switch(level) {
+         case 1:
+         case 2: moveSpeed=12; break;
+         case 3: 
+         case 4:
+         case 5: 
+         case 6: moveSpeed = 12-level; break;
+         case 7: moveSpeed = 5; break;
+         default: moveSpeed = 4;
+       }
     }
 }
 
@@ -204,6 +226,7 @@ int testAndRemoveRow(int row, int mat[WIDTH][HEIGHT]){
 
 void gameOver() {
   status = STATUS_WAIT;   
+  phaseTimestamp = xTaskGetTickCount();
   sendGameOver();
 }
 
@@ -291,7 +314,7 @@ int rate(int mat[WIDTH][HEIGHT], int r, int px, int py) {
   Serial.printf("----------------\n");
   */
   
-    return 10*rowsRemoved - allHoles*5 - highest - (HEIGHT-py);
+    return 10*rowsRemoved - allHoles*5 - (highest*3) - (HEIGHT-py);
 }
 
 int countFilled(int row, int mat[WIDTH][HEIGHT]) {
